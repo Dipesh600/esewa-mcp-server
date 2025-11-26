@@ -10,27 +10,16 @@ import {
 
 dotenv.config();
 
-// Create MCP server instance
+// Create MCP server instance with tools
 const mcpServer = new Server({
   name: "esewa-mcp-server",
-  version: "1.0.0"
-});
-
-// Map tools → service functions
-mcpServer.tool("createPaymentSession", async (input) => {
-  return await createPaymentSessionService(input);
-});
-
-mcpServer.tool("verifyTransaction", async (input) => {
-  return await verifyTransactionService(input);
-});
-
-mcpServer.tool("refundPayment", async (input) => {
-  return await refundPaymentService(input);
-});
-
-mcpServer.tool("getPaymentStatus", async (input) => {
-  return await getPaymentStatusService(input);
+  version: "1.0.0",
+  tools: [
+    { name: "createPaymentSession", handler: createPaymentSessionService },
+    { name: "verifyTransaction", handler: verifyTransactionService },
+    { name: "refundPayment", handler: refundPaymentService },
+    { name: "getPaymentStatus", handler: getPaymentStatusService }
+  ]
 });
 
 // HTTP server required by MCP
