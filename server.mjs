@@ -31,16 +31,16 @@ mcpServer.registerTool("initiate_payment", {
       returnUrl: successUrl,
       cancelUrl: failureUrl
     });
-    const responseText = JSON.stringify(result);
+    // Ensure only plain JSON-serializable object, no Zod schemas
+    const plainResult = JSON.parse(JSON.stringify(result));
+    const responseText = JSON.stringify(plainResult);
     return {
-      content: [{ type: 'text', text: responseText }],
-      structuredContent: result
+      content: [{ type: 'text', text: responseText }]
     };
   } catch (err) {
-    const errorObj = { error: err.message || String(err) };
+    const errorText = err.message || String(err);
     return {
-      content: [{ type: 'text', text: JSON.stringify(errorObj) }],
-      structuredContent: errorObj,
+      content: [{ type: 'text', text: JSON.stringify({ error: errorText }) }],
       isError: true
     };
   }
@@ -53,16 +53,15 @@ mcpServer.registerTool("verify_payment", {
 }, async ({ transactionId, refId, amount }) => {
   try {
     const result = await verifyTransactionService({ transactionId, amount });
-    const responseText = JSON.stringify(result);
+    const plainResult = JSON.parse(JSON.stringify(result));
+    const responseText = JSON.stringify(plainResult);
     return {
-      content: [{ type: 'text', text: responseText }],
-      structuredContent: result
+      content: [{ type: 'text', text: responseText }]
     };
   } catch (err) {
-    const errorObj = { error: err.message || String(err) };
+    const errorText = err.message || String(err);
     return {
-      content: [{ type: 'text', text: JSON.stringify(errorObj) }],
-      structuredContent: errorObj,
+      content: [{ type: 'text', text: JSON.stringify({ error: errorText }) }],
       isError: true
     };
   }
@@ -82,15 +81,14 @@ mcpServer.registerTool("get_test_credentials", {
       token: process.env.ESEWA_TOKEN || "123456",
       secretKey: process.env.ESEWA_SECRET_KEY || "8gBm/:&EnhH.1/q"
     };
+    const plainCreds = JSON.parse(JSON.stringify(creds));
     return {
-      content: [{ type: 'text', text: JSON.stringify(creds) }],
-      structuredContent: creds
+      content: [{ type: 'text', text: JSON.stringify(plainCreds) }]
     };
   } catch (err) {
-    const errorObj = { error: err.message || String(err) };
+    const errorText = err.message || String(err);
     return {
-      content: [{ type: 'text', text: JSON.stringify(errorObj) }],
-      structuredContent: errorObj,
+      content: [{ type: 'text', text: JSON.stringify({ error: errorText }) }],
       isError: true
     };
   }
@@ -104,15 +102,14 @@ mcpServer.registerTool("health_check", {
   try {
     const uptime = process.uptime();
     const health = { status: "healthy", uptime };
+    const plainHealth = JSON.parse(JSON.stringify(health));
     return {
-      content: [{ type: 'text', text: JSON.stringify(health) }],
-      structuredContent: health
+      content: [{ type: 'text', text: JSON.stringify(plainHealth) }]
     };
   } catch (err) {
-    const errorObj = { error: err.message || String(err) };
+    const errorText = err.message || String(err);
     return {
-      content: [{ type: 'text', text: JSON.stringify(errorObj) }],
-      structuredContent: errorObj,
+      content: [{ type: 'text', text: JSON.stringify({ error: errorText }) }],
       isError: true
     };
   }
