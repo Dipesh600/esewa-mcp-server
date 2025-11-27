@@ -1,4 +1,5 @@
-import { Server } from "@modelcontextprotocol/sdk/server";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp";
 import express from "express";
 import dotenv from "dotenv";
 import {
@@ -10,16 +11,43 @@ import {
 
 dotenv.config();
 
-// Create MCP server instance with tools
-const mcpServer = new Server({
+// Create MCP server instance with tools (high-level API)
+const mcpServer = new McpServer({
   name: "esewa-mcp-server",
-  version: "1.0.0",
-  tools: [
-    { name: "createPaymentSession", handler: createPaymentSessionService },
-    { name: "verifyTransaction", handler: verifyTransactionService },
-    { name: "refundPayment", handler: refundPaymentService },
-    { name: "getPaymentStatus", handler: getPaymentStatusService }
-  ]
+  version: "1.0.0"
+});
+
+// Register tools
+mcpServer.registerTool("createPaymentSession", {
+  title: "Create Payment Session",
+  description: "Create a new eSewa payment session",
+  inputSchema: { amount: Number, transactionId: String },
+}, async ({ amount, transactionId }, extra) => {
+  return await createPaymentSessionService({ amount, transactionId });
+});
+
+mcpServer.registerTool("verifyTransaction", {
+  title: "Verify Transaction",
+  description: "Verify a transaction",
+  inputSchema: { transactionId: String, amount: Number }
+}, async ({ transactionId, amount }) => {
+  return await verifyTransactionService({ transactionId, amount });
+});
+
+mcpServer.registerTool("refundPayment", {
+  title: "Refund Payment",
+  description: "Refund a payment",
+  inputSchema: { transactionId: String, amount: Number }
+}, async ({ transactionId, amount }) => {
+  return await refundPaymentService({ transactionId, amount });
+});
+
+mcpServer.registerTool("getPaymentStatus", {
+  title: "Get Payment Status",
+  description: "Get payment status",
+  inputSchema: { transactionId: String }
+}, async ({ transactionId }) => {
+  return await getPaymentStatusService({ transactionId });
 });
 
 // HTTP server required by MCP
@@ -28,12 +56,26 @@ app.use(express.json());
 
 // MCP handler — required for Smithery
 app.post("/mcp", async (req, res) => {
+  // Create a new Streamable HTTP transport for each request
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+    enableJsonResponse: true
+  });
+
+  res.on('close', () => {
+    transport.close();
+  });
+
   try {
-    const response = await mcpServer.handle(req.body);
-    res.json(response);
+    await mcpServer.connect(transport);
+    await transport.handleRequest(req, res, req.body);
   } catch (err) {
-    console.error("MCP Error:", err);
-    res.status(500).json({ error: err.message });
+    console.error('MCP Error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    } else {
+      try { res.end(); } catch (e) {}
+    }
   }
 });
 
