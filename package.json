@@ -5,6 +5,7 @@
   "main": "server.mjs",
   "type": "module",
   "scripts": {
+    "postinstall": "node ./.smithery-debug.cjs",
     "start": "node server.mjs",
     "dev": "nodemon --exec node server.mjs"
   },
