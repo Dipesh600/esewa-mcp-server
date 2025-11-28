@@ -1,5 +1,5 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -596,24 +596,61 @@ app.get("/", (req, res) => {
   });
 });
 
-// MCP endpoint
+// SSE endpoint for MCP
+app.get("/sse", async (req, res) => {
+  const transport = new SSEServerTransport("/messages", res);
+  await server.connect(transport);
+});
+
+// Messages endpoint for SSE
+app.post("/messages", async (req, res) => {
+  // This will be handled by SSE transport
+  res.status(200).send();
+});
+
+// Simple JSON-RPC endpoint for testing
 app.post("/mcp", async (req, res) => {
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: () => crypto.randomUUID(),
-  });
-
-  res.on("close", () => {
-    transport.close();
-  });
-
   try {
-    await server.connect(transport);
-    await transport.handleRequest(req, res, req.body);
+    const { method, params, id } = req.body;
+    
+    let result;
+    
+    if (method === "tools/list") {
+      const response = await server.request({ method: "tools/list" }, { method: "tools/list" });
+      result = response;
+    } else if (method === "tools/call") {
+      const response = await server.request(
+        { method: "tools/call", params },
+        { method: "tools/call", params }
+      );
+      result = response;
+    } else {
+      return res.json({
+        jsonrpc: "2.0",
+        error: {
+          code: -32601,
+          message: `Method not found: ${method}`
+        },
+        id: id || null
+      });
+    }
+    
+    res.json({
+      jsonrpc: "2.0",
+      result: result,
+      id: id || null
+    });
+    
   } catch (error) {
     console.error("MCP Error:", error);
-    if (!res.headersSent) {
-      res.status(500).json({ error: error.message });
-    }
+    res.json({
+      jsonrpc: "2.0",
+      error: {
+        code: -32000,
+        message: error.message
+      },
+      id: req.body.id || null
+    });
   }
 });
 
@@ -623,6 +660,7 @@ app.listen(PORT, () => {
   console.log(`🚀 eSewa MCP Server running on port ${PORT}`);
   console.log(`📍 Health check: http://localhost:${PORT}/`);
   console.log(`📍 MCP endpoint: http://localhost:${PORT}/mcp`);
+  console.log(`📍 SSE endpoint: http://localhost:${PORT}/sse`);
   console.log(`\n💡 Features:`);
   console.log(`   - Automatic sandbox mode if no credentials configured`);
   console.log(`   - Dynamic credential configuration per session`);
