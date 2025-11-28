@@ -1,131 +1,152 @@
 import axios from "axios";
+import crypto from "crypto";
 
-// eSewa test credentials (you can override with ENV variables)
-const MERCHANT_CODE = process.env.ESEWA_MERCHANT_CODE || "EPAYTEST";
-const SECRET_KEY = process.env.ESEWA_SECRET_KEY || "8gBm/:&EnhH.1/q";
-const TOKEN = process.env.ESEWA_TOKEN || "123456";
+// eSewa Configuration
+const ESEWA_CONFIG = {
+  merchantCode: process.env.ESEWA_MERCHANT_CODE || "EPAYTEST",
+  secretKey: process.env.ESEWA_SECRET_KEY || "8gBm/:&EnhH.1/q",
+  paymentUrl: "https://rc-epay.esewa.com.np/api/epay/main/v2/form",
+  verifyUrl: "https://rc-epay.esewa.com.np/api/epay/transaction/status/",
+};
 
-// eSewa API endpoints
-const ESEWA_PAYMENT_URL = "https://rc-epay.esewa.com.np/api/epay/main/v2/form";
-const ESEWA_VERIFY_URL = "https://rc-epay.esewa.com.np/api/epay/transaction/status/";
-const ESEWA_REFUND_URL = "https://rc-epay.esewa.com.np/api/epay/refund";
-const ESEWA_STATUS_URL = "https://rc-epay.esewa.com.np/api/epay/transaction/";
+/**
+ * Generate HMAC-SHA256 signature for eSewa payment
+ */
+function generateSignature(totalAmount, transactionUuid, productCode) {
+  const message = `total_amount=${totalAmount},transaction_uuid=${transactionUuid},product_code=${productCode}`;
+  const hash = crypto
+    .createHmac("sha256", ESEWA_CONFIG.secretKey)
+    .update(message)
+    .digest("base64");
+  return hash;
+}
 
-// -------------------------------
-// 1. Create Payment Session
-// -------------------------------
+/**
+ * Create Payment Session
+ */
 export async function createPaymentSessionService(input) {
   try {
     const {
       amount,
       transactionId,
       productName,
-      merchantCode = MERCHANT_CODE,
+      merchantCode = ESEWA_CONFIG.merchantCode,
       returnUrl,
-      cancelUrl
+      cancelUrl,
     } = input;
 
-    const payload = {
-      amount: amount,
-      failure_url: cancelUrl,
-      product_delivery_charge: 0,
-      product_service_charge: 0,
-      product_code: merchantCode,
-      signature: SECRET_KEY,
-      signed_field_names: "total_amount,transaction_uuid,product_code",
-      success_url: returnUrl,
-      tax_amount: 0,
-      total_amount: amount,
-      transaction_uuid: transactionId
-    };
+    // Generate signature
+    const signature = generateSignature(amount, transactionId, merchantCode);
 
-    const response = await axios.post(ESEWA_PAYMENT_URL, payload);
+    // Prepare payload
+    const paymentData = {
+      amount: amount.toString(),
+      tax_amount: "0",
+      total_amount: amount.toString(),
+      transaction_uuid: transactionId,
+      product_code: merchantCode,
+      product_service_charge: "0",
+      product_delivery_charge: "0",
+      success_url: returnUrl,
+      failure_url: cancelUrl,
+      signed_field_names: "total_amount,transaction_uuid,product_code",
+      signature: signature,
+    };
 
     return {
-      paymentUrl: response.data.data,
-      message: "Payment session created successfully"
+      success: true,
+      paymentUrl: ESEWA_CONFIG.paymentUrl,
+      paymentData: paymentData,
+      message: "Payment session created successfully. POST this data to paymentUrl.",
     };
-
   } catch (err) {
     return {
-      error: err.message
+      success: false,
+      error: err.message,
     };
   }
 }
 
-// -------------------------------
-// 2. Verify Transaction
-// -------------------------------
+/**
+ * Verify Transaction
+ */
 export async function verifyTransactionService(input) {
   try {
     const { transactionId, amount } = input;
 
-    const url = `${ESEWA_VERIFY_URL}?product_code=${MERCHANT_CODE}&total_amount=${amount}&transaction_uuid=${transactionId}`;
+    const url = `${ESEWA_CONFIG.verifyUrl}?product_code=${ESEWA_CONFIG.merchantCode}&total_amount=${amount}&transaction_uuid=${transactionId}`;
 
     const response = await axios.get(url);
 
     return {
+      success: true,
+      verified: response.data.status === "COMPLETE",
       status: response.data.status,
-      response: response.data
+      response: response.data,
     };
-
   } catch (err) {
     return {
+      success: false,
       status: "FAILED",
-      error: err.message
+      error: err.message,
     };
   }
 }
 
-// -------------------------------
-// 3. Refund Payment
-// -------------------------------
+/**
+ * Refund Payment (Note: This may require additional authentication)
+ */
 export async function refundPaymentService(input) {
   try {
     const { transactionId, amount } = input;
 
+    // eSewa refund endpoint (verify with eSewa documentation)
+    const refundUrl = "https://rc-epay.esewa.com.np/api/epay/refund";
+
     const payload = {
-      product_code: MERCHANT_CODE,
+      product_code: ESEWA_CONFIG.merchantCode,
       transaction_uuid: transactionId,
       refund_amount: amount,
-      token: TOKEN
+      // You may need additional auth token here
     };
 
-    const response = await axios.post(ESEWA_REFUND_URL, payload);
+    const response = await axios.post(refundUrl, payload);
 
     return {
+      success: true,
       status: response.data.status,
-      message: response.data.message || "Refund processed"
+      message: response.data.message || "Refund processed",
     };
-
   } catch (err) {
     return {
+      success: false,
       status: "FAILED",
-      error: err.message
+      error: err.message,
     };
   }
 }
 
-// -------------------------------
-// 4. Get Payment Status
-// -------------------------------
+/**
+ * Get Payment Status
+ */
 export async function getPaymentStatusService(input) {
   try {
-    const { transactionId } = input;
+    const { transactionId, amount } = input;
 
-    const url = `${ESEWA_STATUS_URL}${transactionId}?product_code=${MERCHANT_CODE}`;
+    const url = `${ESEWA_CONFIG.verifyUrl}?product_code=${ESEWA_CONFIG.merchantCode}&total_amount=${amount}&transaction_uuid=${transactionId}`;
 
     const response = await axios.get(url);
 
     return {
+      success: true,
       status: response.data.status,
-      details: response.data
+      details: response.data,
     };
-
   } catch (err) {
     return {
+      success: false,
       status: "FAILED",
-      error: err.message
+      error: err.message,
     };
   }
 }
